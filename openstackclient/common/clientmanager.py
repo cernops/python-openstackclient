@@ -21,6 +21,8 @@ import sys
 
 from keystoneclient.auth.identity import v2 as v2_auth
 from keystoneclient.auth.identity import v3 as v3_auth
+from keystoneclient.contrib.auth.v3 import kerberos as v3_auth_kerberos
+from keystoneclient.contrib.auth.v3 import x509 as v3_auth_x509
 from keystoneclient import session
 from openstackclient.identity import client as identity_client
 
@@ -52,7 +54,7 @@ class ClientManager(object):
                  user_domain_id=None, user_domain_name=None,
                  project_domain_id=None, project_domain_name=None,
                  region_name=None, api_version=None, verify=True,
-                 trust_id=None, timing=None):
+                 trust_id=None, timing=None, client_cert=None):
         self._token = token
         self._url = url
         self._auth_url = auth_url
@@ -92,8 +94,32 @@ class ClientManager(object):
 
         # NOTE(dtroyer): These plugins are hard-coded for the first step
         #                in using the new Keystone auth plugins.
-
-        if self._url:
+        if 'krb' in auth_url and ver_prefix == 'v3':
+            LOG.debug('Using kerberos auth %s', ver_prefix)
+            self.auth = v3_auth_kerberos.Kerberos(
+                auth_url=auth_url,
+                trust_id=trust_id,
+                domain_id=domain_id,
+                domain_name=domain_name,
+                project_id=project_id,
+                project_name=project_name,
+                project_domain_id=project_domain_id,
+                project_domain_name=project_domain_name,
+            )
+        elif 'x509' in auth_url and ver_prefix == 'v3':
+            LOG.debug('Using x509 auth %s', ver_prefix)
+            self.auth = v3_auth_x509.X509(
+                auth_url=auth_url,
+                trust_id=trust_id,
+                domain_id=domain_id,
+                domain_name=domain_name,
+                project_id=project_id,
+                project_name=project_name,
+                project_domain_id=project_domain_id,
+                project_domain_name=project_domain_name,
+                client_cert=client_cert,
+            )
+        elif self._url:
             LOG.debug('Using token auth %s', ver_prefix)
             if ver_prefix == 'v2':
                 self.auth = v2_auth.Token(

@@ -20,6 +20,7 @@ import getpass
 import logging
 import os
 import sys
+import subprocess
 import traceback
 
 from cliff import app
@@ -315,14 +316,34 @@ class OpenStackShell(app.App):
             action='store_true',
             help="Print API call timing info",
         )
-
+        parser.add_argument(
+            '--os-clientcert',
+            metavar='<client-bundle-file>',
+            default=env('OS_CLIENTCERT'),
+            help='Client certificate bundle file (Env: OS_CLIENTCERT)')
+        parser.add_argument(
+            '--os-clientkey',
+            metavar='<client-key-file>',
+            default=env('OS_CLIENTKEY'),
+            help='Client certificate bundle file (Env: OS_CLIENTKEY)')
         return parser
 
     def authenticate_user(self):
         """Verify the required authentication credentials are present"""
 
         self.log.debug('validating authentication options')
-        if self.options.os_token or self.options.os_url:
+        if self.options.os_auth_url and 'krb' in self.options.os_auth_url:
+            if subprocess.call(['klist', '-s']) != 0:
+                raise exc.CommandError(
+                    "You must provide a kerberos ticket to connect")
+
+        elif self.options.os_auth_url and 'x509' in self.options.os_auth_url:
+            if not self.options.os_clientcert:
+                raise exc.CommandError(
+                    "You must provide a client certificate via"
+                    " either --os-clientcert or env[OS_CLIENTCERT]")
+
+        elif self.options.os_token or self.options.os_url:
             # Token flow auth takes priority
             if not self.options.os_token:
                 raise exc.CommandError(
@@ -389,6 +410,11 @@ class OpenStackShell(app.App):
                     "Authentication cannot be scoped to multiple targets. "
                     "Pick one of project, domain or trust.")
 
+        if not self.options.os_clientkey:
+            client_cert = self.options.os_clientcert
+        else:
+            client_cert = (self.options.os_clientcert, self.options.os_clientkey)
+
         self.client_manager = clientmanager.ClientManager(
             token=self.options.os_token,
             url=self.options.os_url,
@@ -408,6 +434,7 @@ class OpenStackShell(app.App):
             timing=self.options.timing,
             api_version=self.api_version,
             trust_id=self.options.os_trust_id,
+            client_cert=client_cert,
         )
         return
 
